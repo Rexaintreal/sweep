@@ -10,7 +10,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _hasPermission = false;
+  bool _hasPermission = false;  
+  List<AssetEntity> _images = [];
+  bool _loading = true;
 
   @override
   void initState() {
@@ -21,7 +23,32 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _requestPermission() async {
     final PermissionState result = await PhotoManager.requestPermissionExtend();
     setState(() {
-      _hasPermission = result.isAuth;
+      _hasPermission = result.hasAccess;
+    });
+    if (_hasPermission) {
+      await _loadImages();
+    }
+  }
+
+  Future<void> _loadImages() async {
+    final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
+      type: RequestType.image,
+      onlyAll: true,
+    );
+
+    if (albums.isEmpty) {
+      setState(() => _loading = false);
+      return;
+    }
+
+    final List<AssetEntity> images = await albums[0].getAssetListRange(
+      start: 0,
+      end: 100
+    );
+
+    setState(() {
+      _images = images;
+      _loading = false;
     });
   }
 
@@ -45,9 +72,21 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     
-    return const Scaffold(
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_images.isEmpty) {
+      return const Scaffold(
+        body: Center(child: Text('No photos found')),
+      );
+    }
+
+    return Scaffold(
       body: Center(
-        child: Text('Photos loaded soon.'),
+        child: Text('${_images.length} photos found.'),
       ),
     );
   }
