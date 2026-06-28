@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
-import 'package:flutter_card_swiper/flutter_card_swiper.dart';
+import 'clarification_screen.dart';
+import 'swipe_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,20 +13,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _hasPermission = false;
   bool _denied = false;
-  List<AssetEntity> _images = [];
+  int _photoCount = 0;
   bool _loading = true;
-  final CardSwiperController _swiperController = CardSwiperController();
+  bool _bannerDismissed = false;
 
   @override
   void initState() {
     super.initState();
     _checkPermission();
-  }
-
-  @override
-  void dispose() {
-    _swiperController.dispose();
-    super.dispose();
   }
 
   Future<void> _checkPermission() async {
@@ -36,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _hasPermission = true;
         _denied = false;
       });
-      await _loadImages();
+      await _loadCount();
     } else {
       setState(() {
         _hasPermission = false;
@@ -52,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _hasPermission = true;
         _denied = false;
       });
-      await _loadImages();
+      await _loadCount();
     } else {
       setState(() {
         _hasPermission = false;
@@ -61,36 +55,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _loadImages() async {
+  Future<void> _loadCount() async {
     final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
       type: RequestType.image,
       onlyAll: true,
     );
-
     if (albums.isEmpty) {
       setState(() => _loading = false);
       return;
     }
-
-    final List<AssetEntity> images = await albums[0].getAssetListRange(
-      start: 0,
-      end: 100,
-    );
-
+    final count = await albums[0].assetCountAsync;
     setState(() {
-      _images = images;
+      _photoCount = count;
       _loading = false;
     });
-  }
-
-  bool _onSwipe(
-      int prevIndex, int? currentIndex, CardSwiperDirection direction) {
-    if (direction == CardSwiperDirection.left) {
-      debugPrint('Deleted: ${_images[prevIndex].id}');
-    } else if (direction == CardSwiperDirection.right) {
-      debugPrint('Kept: ${_images[prevIndex].id}');
-    }
-    return true;
   }
 
   @override
@@ -123,11 +101,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 15,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        // ignore: deprecated_member_use
-                        .withOpacity(0.6),
+                    // ignore: deprecated_member_use
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -136,11 +111,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 15,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        // ignore: deprecated_member_use
-                        .withOpacity(0.6),
+                    // ignore: deprecated_member_use
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -187,30 +159,107 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    if (_images.isEmpty) {
-      return const Scaffold(
-        body: Center(child: Text('No photos found.')),
-      );
-    }
-
     return Scaffold(
-      body: SafeArea(
-        child: CardSwiper(
-          controller: _swiperController,
-          cardsCount: _images.length,
-          onSwipe: _onSwipe,
-          padding: const EdgeInsets.all(24),
-          cardBuilder: (context, index, percentThresholdX, percentThresholdY) {
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: AssetEntityImage(
-                _images[index],
-                isOriginal: false,
-                fit: BoxFit.cover,
-              ),
-            );
-          },
+      appBar: AppBar(
+        leading: const Icon(Icons.menu),
+        title: const Text(
+          'SWEEP',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1.5),
         ),
+      ),
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            // ignore: deprecated_member_use
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.tertiary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'The app can only delete pictures from your local device and not from cloud backups like Google Photos.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          // ignore: deprecated_member_use
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const ClarificationScreen()),
+                        ),
+                        child: Text(
+                          'Learn more',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.sd_card_outlined,
+                  size: 100,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Discovered',
+                  style: TextStyle(
+                    fontSize: 16,
+                    // ignore: deprecated_member_use
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$_photoCount',
+                  style: const TextStyle(
+                    fontSize: 56,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  'photos',
+                  style: TextStyle(
+                    fontSize: 15,
+                    // ignore: deprecated_member_use
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                ),
+                const SizedBox(height: 40),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SwipeScreen()),
+                  ),
+                  icon: const Icon(Icons.arrow_forward, size: 18),
+                  label: const Text('Start cleaning'),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
