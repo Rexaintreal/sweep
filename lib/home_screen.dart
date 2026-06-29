@@ -169,51 +169,55 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            // ignore: deprecated_member_use
-            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.4),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.warning_amber_rounded,
-                    size: 18,
-                    color: Theme.of(context).colorScheme.tertiary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'The app can only delete pictures from your local device and not from cloud backups like Google Photos.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          // ignore: deprecated_member_use
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                              builder: (_) => const ClarificationScreen()),
-                        ),
-                        child: Text(
-                          'Learn more',
+          if (!_bannerDismissed)
+            Container(
+              width: double.infinity,
+              // ignore: deprecated_member_use
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.tertiary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'The app can only delete pictures from your local device and not from cloud backups like Google Photos.',
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.primary,
+                            // ignore: deprecated_member_use
+                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) => const ClarificationScreen()),
+                            );
+                            setState(() => _bannerDismissed = true);
+                          },
+                          child: Text(
+                            'Learn more',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
