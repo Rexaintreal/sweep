@@ -140,34 +140,10 @@ class _SwipeScreenState extends State<SwipeScreen> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: AssetEntityImage(
-                        _currentAsset,
-                        isOriginal: false,
-                        fit: BoxFit.contain,
-                        width: double.infinity,
-                        height: double.infinity,
-                      ),
-                    ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          // ignore: deprecated_member_use
-                          color: Colors.black.withOpacity(0.4),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.fullscreen, color: Colors.white),
-                          onPressed: () {},
-                        ),
-                      ),
-                    ),
-                  ],
+                child: _SwipeableCard(
+                  key: ValueKey(_currentIndex),
+                  asset: _currentAsset,
+                  onDecide: _decide,
                 ),
               ),
             ),
@@ -350,6 +326,149 @@ class _ActionButton extends StatelessWidget {
           Text(label, style: const TextStyle(fontSize: 11)),
         ],
       ],
+    );
+  }
+}
+
+class _SwipeableCard extends StatefulWidget {
+  final AssetEntity asset;
+  final void Function(String decision) onDecide;
+
+  const _SwipeableCard({super.key, required this.asset, required this.onDecide});
+
+  @override
+  State<_SwipeableCard> createState() => _SwipeableCardState();
+}
+
+class _SwipeableCardState extends State<_SwipeableCard>
+    with SingleTickerProviderStateMixin {
+  Offset _dragOffset = Offset.zero;
+  bool _dragging = false;
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    setState(() {
+      _dragOffset += details.delta;
+      _dragging = true;
+    });
+  }
+
+  void _onPanEnd(DragEndDetails details) {
+    final threshold = MediaQuery.of(context).size.width * 0.28;
+    if (_dragOffset.dx > threshold) {
+      widget.onDecide('keep');
+    } else if (_dragOffset.dx < -threshold) {
+      widget.onDecide('delete');
+    } else {
+      setState(() {
+        _dragOffset = Offset.zero;
+        _dragging = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final angle = _dragOffset.dx / 300;
+    final showDelete = _dragOffset.dx < -20;
+    final showKeep = _dragOffset.dx > 20;
+    final stampOpacity = (_dragOffset.dx.abs() / 100).clamp(0.0, 1.0);
+
+    return GestureDetector(
+      onPanUpdate: _onPanUpdate,
+      onPanEnd: _onPanEnd,
+      child: AnimatedContainer(
+        duration: _dragging ? Duration.zero : const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        transform: Matrix4.identity()
+          ..translate(_dragOffset.dx, _dragOffset.dy)
+          ..rotateZ(angle),
+        transformAlignment: Alignment.center,
+        child: Stack(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AssetEntityImage(
+                widget.asset,
+                isOriginal: false,
+                fit: BoxFit.contain,
+                width: double.infinity,
+                height: double.infinity,
+              ),
+            ),
+            if (showDelete)
+              Positioned(
+                top: 24,
+                left: 24,
+                child: Opacity(
+                  opacity: stampOpacity,
+                  child: Transform.rotate(
+                    angle: -0.3,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 6),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.red, width: 3),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'DELETE',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 22,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (showKeep)
+              Positioned(
+                top: 24,
+                right: 24,
+                child: Opacity(
+                  opacity: stampOpacity,
+                  child: Transform.rotate(
+                    angle: 0.3,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 6),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.green, width: 3),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'KEEP',
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 22,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                decoration: BoxDecoration(
+                  // ignore: deprecated_member_use
+                  color: Colors.black.withOpacity(0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.fullscreen, color: Colors.white),
+                  onPressed: () {},
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
