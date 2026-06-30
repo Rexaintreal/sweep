@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'clarification_screen.dart';
 import 'swipe_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,7 +21,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _loadBannerState();
     _checkPermission();
+  }
+
+  Future<void> _loadBannerState() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _bannerDismissed = prefs.getBool('banner_dismissed') ?? false;
+    });
   }
 
   Future<void> _checkPermission() async {
@@ -197,11 +206,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 4),
                         GestureDetector(
                           onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const ClarificationScreen()),
+                            final result = await Navigator.of(context).push<bool>(
+                              MaterialPageRoute(builder: (_) => const ClarificationScreen()),
                             );
-                            setState(() => _bannerDismissed = true);
+                            if (result == true) {
+                              final prefs = await SharedPreferences.getInstance();
+                              await prefs.setBool('banner_dismissed', true);
+                              setState(() => _bannerDismissed = true);
+                            }
                           },
                           child: Text(
                             'Learn more',
@@ -219,48 +231,51 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.sd_card_outlined,
-                  size: 100,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Discovered',
-                  style: TextStyle(
-                    fontSize: 16,
-                    // ignore: deprecated_member_use
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            child: Center (
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.sd_card_outlined,
+                    size: 100,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$_photoCount',
-                  style: const TextStyle(
-                    fontSize: 56,
-                    fontWeight: FontWeight.w700,
+                  const SizedBox(height: 24),
+                  Text(
+                    'Discovered',
+                    style: TextStyle(
+                      fontSize: 16,
+                      // ignore: deprecated_member_use
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                    ),
                   ),
-                ),
-                Text(
-                  'photos',
-                  style: TextStyle(
-                    fontSize: 15,
-                    // ignore: deprecated_member_use
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$_photoCount',
+                    style: const TextStyle(
+                      fontSize: 56,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 40),
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SwipeScreen()),
+                  Text(
+                    'photos',
+                    style: TextStyle(
+                      fontSize: 15,
+                      // ignore: deprecated_member_use
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                    ),
                   ),
-                  icon: const Icon(Icons.arrow_forward, size: 18),
-                  label: const Text('Start cleaning'),
-                ),
-              ],
+                  const SizedBox(height: 40),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SwipeScreen()),
+                    ),
+                    icon: const Icon(Icons.arrow_forward, size: 18),
+                    label: const Text('Start cleaning'),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
