@@ -2,23 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SwipeScreen extends StatefulWidget {
-  const SwipeScreen({super.key});
+  final List<AssetEntity> images;
+  final String monthKey;
+  final int startIndex;
+
+  const SwipeScreen({
+    super.key,
+    required this.images,
+    required this.monthKey,
+    this.startIndex = 0,
+  });
 
   @override
   State<SwipeScreen> createState() => _SwipeScreenState();
 }
 
 class _SwipeScreenState extends State<SwipeScreen> {
-  List<AssetEntity> _images = [];
-  bool _loading = true;
   final CardSwiperController _swiperController = CardSwiperController();
+  late int _swipedCount;
 
   @override
   void initState() {
     super.initState();
-    _loadImages();
+    _swipedCount = widget.startIndex;
   }
 
   @override
@@ -27,43 +36,26 @@ class _SwipeScreenState extends State<SwipeScreen> {
     super.dispose();
   }
 
-  Future<void> _loadImages() async {
-    final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
-      type: RequestType.image,
-      onlyAll: true,
-    );
-    if (albums.isEmpty) {
-      setState(() => _loading = false);
-      return;
-    }
-    final List<AssetEntity> images = await albums[0].getAssetListRange(
-      start: 0,
-      end: 100,
-    );
-    setState(() {
-      _images = images;
-      _loading = false;
-    });
+  Future<void> _saveProgress() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('swiped_${widget.monthKey}', _swipedCount);
   }
 
-  bool _onSwipe(int prevIndex, int? currentIndex, CardSwiperDirection direction) {
+  bool _onSwipe(
+      int prevIndex, int? currentIndex, CardSwiperDirection direction) {
     if (direction == CardSwiperDirection.left) {
-      debugPrint('Deleted: ${_images[prevIndex].id}');
+      debugPrint('Deleted: ${widget.images[prevIndex].id}');
     } else if (direction == CardSwiperDirection.right) {
-      debugPrint('Kept: ${_images[prevIndex].id}');
+      debugPrint('Kept: ${widget.images[prevIndex].id}');
     }
+    _swipedCount++;
+    _saveProgress();
     return true;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_images.isEmpty) {
+    if (widget.images.isEmpty) {
       return const Scaffold(
         body: Center(child: Text('No photos found.')),
       );
@@ -77,20 +69,23 @@ class _SwipeScreenState extends State<SwipeScreen> {
         ),
         title: const Text(
           'SWEEP',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1.5),
+          style: TextStyle(
+              fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1.5),
         ),
       ),
       body: SafeArea(
         child: CardSwiper(
           controller: _swiperController,
-          cardsCount: _images.length,
+          cardsCount: widget.images.length,
+          initialIndex: widget.startIndex.clamp(0, widget.images.length - 1),
           onSwipe: _onSwipe,
           padding: const EdgeInsets.all(24),
-          cardBuilder: (context, index, percentThresholdX, percentThresholdY) {
+          cardBuilder:
+              (context, index, percentThresholdX, percentThresholdY) {
             return ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: AssetEntityImage(
-                _images[index],
+                widget.images[index],
                 isOriginal: false,
                 fit: BoxFit.cover,
               ),

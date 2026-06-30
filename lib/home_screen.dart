@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'clarification_screen.dart';
-import 'swipe_screen.dart';
+import 'month_select_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -269,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 40),
                   FilledButton.icon(
                     onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const SwipeScreen()),
+                      MaterialPageRoute(builder: (_) => const MonthSelectScreen()),
                     ),
                     icon: const Icon(Icons.arrow_forward, size: 18),
                     label: const Text('Start cleaning'),
