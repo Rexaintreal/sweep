@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SwipeScreen extends StatefulWidget {
   final List<AssetEntity> images;
@@ -20,6 +21,8 @@ class SwipeScreen extends StatefulWidget {
 
 class _SwipeScreenState extends State<SwipeScreen> {
   late int _currentIndex;
+  final List<int> _history = [];
+  final Map<int, String> _decisions = {};
 
   @override
   void initState() {
@@ -27,8 +30,58 @@ class _SwipeScreenState extends State<SwipeScreen> {
     _currentIndex = widget.startIndex.clamp(0, widget.images.length - 1);
   }
 
+  void _decide(String decision) {
+    if (_currentIndex >= widget.images.length) return;
+    setState(() {
+      _decisions[_currentIndex] = decision;
+      _history.add(_currentIndex);
+      _currentIndex++;
+    });
+    _saveProgress();
+    if (_currentIndex >= widget.images.length) {
+      _showDoneDialog();
+    }
+  }
 
-  AssetEntity get _currentAsset => widget.images[_currentIndex];
+  void _undo() {
+    if (_history.isEmpty) return;
+    setState(() {
+      final lastIndex = _history.removeLast();
+      _decisions.remove(lastIndex);
+      _currentIndex = lastIndex;
+    });
+    _saveProgress();
+  }
+
+  Future<void> _saveProgress() async {
+    final prefs = await SharedPreferences.getInstance();
+    final clamped = _currentIndex.clamp(0, widget.images.length);
+    await prefs.setInt('swiped_${widget.monthKey}', clamped);
+  }
+
+  void _showDoneDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('All done'),
+        content: Text(
+          'You\'ve gone through all ${widget.images.length} photos in this month.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+            child: const Text('Back to months'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  AssetEntity get _currentAsset =>
+      widget.images[_currentIndex.clamp(0, widget.images.length - 1)];
 
   String get _monthLabel {
     final parts = widget.monthKey.split('-');
@@ -46,6 +99,12 @@ class _SwipeScreenState extends State<SwipeScreen> {
     if (widget.images.isEmpty) {
       return const Scaffold(
         body: Center(child: Text('No photos found.')),
+      );
+    }
+
+    if (_currentIndex >= widget.images.length) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -122,25 +181,25 @@ class _SwipeScreenState extends State<SwipeScreen> {
                     icon: Icons.delete,
                     color: Colors.red,
                     label: 'Delete',
-                    onTap: () {},
+                    onTap: () => _decide('delete'),
                   ),
                   _ActionButton(
                     icon: Icons.undo,
                     color: Colors.grey,
                     label: 'Undo',
-                    onTap: () {},
+                    onTap: _undo,
                   ),
                   _ActionButton(
                     icon: Icons.fast_forward,
                     color: Colors.grey,
                     label: 'Skip',
-                    onTap: () {},
+                    onTap: () => _decide('skip'),
                   ),
                   _ActionButton(
                     icon: Icons.check,
                     color: Colors.green,
                     label: '',
-                    onTap: () {},
+                    onTap: () => _decide('keep'),
                   ),
                 ],
               ),
