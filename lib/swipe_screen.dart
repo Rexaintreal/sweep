@@ -23,6 +23,29 @@ class _SwipeScreenState extends State<SwipeScreen> {
   late int _currentIndex;
   final List<int> _history = [];
   final Map<int, String> _decisions = {};
+  bool _deleting = false;
+
+  List<String> get _pendingDeleteIds {
+    return _decisions.entries
+        .where((e) => e.value == 'delete')
+        .map((e) => widget.images[e.key].id)
+        .toList();
+  }
+
+  Future<List<String>> _performDelete() async {
+    final ids = _pendingDeleteIds;
+    if (ids.isEmpty) return [];
+    setState(() => _deleting = true);
+    List<String> result = [];
+    try {
+      result = await PhotoManager.editor.deleteWithIds(ids);
+    } catch (e) {
+      result = [];
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+    return result;
+  }
 
   @override
   void initState() {
@@ -60,24 +83,83 @@ class _SwipeScreenState extends State<SwipeScreen> {
   }
 
   void _showDoneDialog() {
+    final pendingCount = _pendingDeleteIds.length;
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('All done'),
         content: Text(
-          'You\'ve gone through all ${widget.images.length} photos in this month.',
+          pendingCount > 0
+              ? 'You\'ve gone through all ${widget.images.length} photos. '
+                  '$pendingCount marked for deletion. Delete them now?'
+              : 'You\'ve gone through all ${widget.images.length} photos in this month.',
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
+          if (pendingCount > 0)
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+              child: const Text('Not now'),
+            ),
+          FilledButton(
+            onPressed: () async {
+              final navigator = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
+              navigator.pop();
+              if (pendingCount > 0) {
+                final deleted = await _performDelete();
+                if (!mounted) return;
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      deleted.length == pendingCount
+                          ? 'Deleted ${deleted.length} photos'
+                          : 'Deleted ${deleted.length} of $pendingCount photos',
+                    ),
+                  ),
+                );
+              }
+              if (!mounted) return;
+              navigator.pop();
             },
-            child: const Text('Back to months'),
+            child: Text(
+              pendingCount > 0 ? 'Delete $pendingCount photos' : 'Back to months',
+            ),
           ),
         ],
       ),
     );
+  }
+
+  Future<bool> _handleExit() async {
+    final pending = _pendingDeleteIds.length;
+    if (pending == 0) return true;
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pending deletions'),
+        content: Text(
+          '$pending photo(s) are marked for deletion. Delete them before leaving?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Discard marks'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete now'),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete == true) {
+      await _performDelete();
+    }
+    return true;
   }
 
   AssetEntity get _currentAsset =>
@@ -108,92 +190,110 @@ class _SwipeScreenState extends State<SwipeScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          _monthLabel,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () {},
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final canExit = await _handleExit();
+        // ignore: use_build_context_synchronously
+        if (canExit && mounted) Navigator.of(context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
+          title: Text(
+            _monthLabel,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.more_vert),
+              onPressed: () {},
+            ),
+          ],
+        ),
+        body: Stack(
           children: [
-            _ThumbnailStrip(
-              images: widget.images,
-              currentIndex: _currentIndex,
-            ),
-            _InfoRow(
-              asset: _currentAsset,
-              index: _currentIndex,
-              total: widget.images.length,
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _SwipeableCard(
-                  key: ValueKey(_currentIndex),
-                  asset: _currentAsset,
-                  onDecide: _decide,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            SafeArea(
+              child: Column(
                 children: [
-                  _ActionButton(
-                    icon: Icons.delete,
-                    color: Colors.red,
-                    label: 'Delete',
-                    onTap: () => _decide('delete'),
+                  _ThumbnailStrip(
+                    images: widget.images,
+                    currentIndex: _currentIndex,
                   ),
-                  _ActionButton(
-                    icon: Icons.undo,
-                    color: Colors.grey,
-                    label: 'Undo',
-                    onTap: _undo,
+                  _InfoRow(
+                    asset: _currentAsset,
+                    index: _currentIndex,
+                    total: widget.images.length,
                   ),
-                  _ActionButton(
-                    icon: Icons.fast_forward,
-                    color: Colors.grey,
-                    label: 'Skip',
-                    onTap: () => _decide('skip'),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _SwipeableCard(
+                        key: ValueKey(_currentIndex),
+                        asset: _currentAsset,
+                        onDecide: _decide,
+                      ),
+                    ),
                   ),
-                  _ActionButton(
-                    icon: Icons.check,
-                    color: Colors.green,
-                    label: '',
-                    onTap: () => _decide('keep'),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _ActionButton(
+                          icon: Icons.delete,
+                          color: Colors.red,
+                          label: 'Delete',
+                          onTap: () => _decide('delete'),
+                        ),
+                        _ActionButton(
+                          icon: Icons.undo,
+                          color: Colors.grey,
+                          label: 'Undo',
+                          onTap: _undo,
+                        ),
+                        _ActionButton(
+                          icon: Icons.fast_forward,
+                          color: Colors.grey,
+                          label: 'Skip',
+                          onTap: () => _decide('skip'),
+                        ),
+                        _ActionButton(
+                          icon: Icons.check,
+                          color: Colors.green,
+                          label: '',
+                          onTap: () => _decide('keep'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          icon: const Text('PROCEED'),
+                          label: const Icon(Icons.arrow_forward, size: 16),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton.icon(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Text('PROCEED'),
-                    label: const Icon(Icons.arrow_forward, size: 16),
-                  ),
-                ],
+            if (_deleting)
+              Container(
+                color: Colors.black26,
+                child: const Center(child: CircularProgressIndicator()),
               ),
-            ),
           ],
         ),
       ),
