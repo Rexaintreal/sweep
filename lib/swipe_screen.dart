@@ -223,6 +223,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
                   _ThumbnailStrip(
                     images: widget.images,
                     currentIndex: _currentIndex,
+                    decisions: _decisions,
                   ),
                   _InfoRow(
                     asset: _currentAsset,
@@ -304,8 +305,13 @@ class _SwipeScreenState extends State<SwipeScreen> {
 class _ThumbnailStrip extends StatefulWidget {
   final List<AssetEntity> images;
   final int currentIndex;
+  final Map<int, String> decisions;
 
-  const _ThumbnailStrip({required this.images, required this.currentIndex});
+  const _ThumbnailStrip({
+    required this.images,
+    required this.currentIndex,
+    required this.decisions
+    });
   @override
   State<_ThumbnailStrip> createState() => _ThumbnailStripState();
 }
@@ -371,10 +377,33 @@ class _ThumbnailStripState extends State<_ThumbnailStrip> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: AssetEntityImage(
-                widget.images[index],
-                isOriginal: false,
-                fit: BoxFit.cover,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AssetEntityImage(
+                    widget.images[index],
+                    isOriginal: false,
+                    fit: BoxFit.cover,
+                  ),
+                  if (widget.decisions.containsKey(index))
+                  Container(
+                    color: switch (widget.decisions[index]) {
+                      // ignore: deprecated_member_use
+                      'delete' => Colors.red.withOpacity(0.85),
+                      // ignore: deprecated_member_use
+                      'keep' => Colors.green.withOpacity(0.85),
+                      // ignore: deprecated_member_use
+                      'skip' => Colors.grey.withOpacity(0.85),
+                      _        => Colors.transparent,
+                    },
+                    child: switch (widget.decisions[index]) {
+                      'delete' => const Icon(Icons.close, color: Colors.white, size: 16),
+                      'keep'   => const Icon(Icons.check, color: Colors.white, size: 16),
+                      'skip'   => const Icon(Icons.fast_forward, color: Colors.white, size: 14),
+                      _        => null,
+                    },
+                  ),
+                ],
               ),
             ),
           );
