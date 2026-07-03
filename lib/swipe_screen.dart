@@ -301,36 +301,78 @@ class _SwipeScreenState extends State<SwipeScreen> {
   }
 }
 
-class _ThumbnailStrip extends StatelessWidget {
+class _ThumbnailStrip extends StatefulWidget {
   final List<AssetEntity> images;
   final int currentIndex;
 
   const _ThumbnailStrip({required this.images, required this.currentIndex});
+  @override
+  State<_ThumbnailStrip> createState() => _ThumbnailStripState();
+}
+
+class _ThumbnailStripState extends State<_ThumbnailStrip> {
+  final ScrollController _scrollController = ScrollController();
+
+  static const double _itemWidth = 48;
+  static const double _itemMargin = 8;
+  static const double _horizontalPadding = 16;
+
+  @override
+  void didUpdateWidget(_ThumbnailStrip old) {
+    super.didUpdateWidget(old);
+    if (old.currentIndex != widget.currentIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActive());
+    }
+  }
+
+  void _scrollToActive() {
+    if (!_scrollController.hasClients) return;
+    final itemStart = _horizontalPadding + widget.currentIndex * (_itemWidth + _itemMargin);
+    final itemCenter = itemStart + _itemWidth / 2;
+    final viewportCenter = _scrollController.position.viewportDimension / 2;
+    final target = (itemCenter - viewportCenter)
+        .clamp(0.0, _scrollController.position.maxScrollExtent);
+    _scrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 64,
       child: ListView.builder(
+        controller: _scrollController,
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        itemCount: images.length,
+        padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding, vertical: 8),
+        itemCount: widget.images.length,
         itemBuilder: (context, index) {
-          final isActive = index == currentIndex;
+          final isActive = index == widget.currentIndex;
           return Container(
-            margin: const EdgeInsets.only(right: 8),
-            width: 48,
+            margin: const EdgeInsets.only(right: _itemMargin),
+            width: _itemWidth,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               border: isActive
-                  ? Border.all(
-                      color: Theme.of(context).colorScheme.primary, width: 2)
+                  ? Border.all(color: Theme.of(context).colorScheme.primary, width: 3)
+                  : Border.all(color: Colors.transparent, width: 3),
+              boxShadow: isActive
+                  // ignore: deprecated_member_use
+                  ? [BoxShadow(color: Theme.of(context).colorScheme.primary.withOpacity(0.5), blurRadius: 6)]
                   : null,
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: AssetEntityImage(
-                images[index],
+                widget.images[index],
                 isOriginal: false,
                 fit: BoxFit.cover,
               ),
