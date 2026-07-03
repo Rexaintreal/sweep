@@ -25,6 +25,8 @@ class _SwipeScreenState extends State<SwipeScreen> {
   final Map<int, String> _decisions = {};
   bool _deleting = false;
 
+  final GlobalKey<_SwipeableCardState> _cardKey = GlobalKey();
+
   List<String> get _pendingDeleteIds {
     return _decisions.entries
         .where((e) => e.value == 'delete')
@@ -53,7 +55,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
     _currentIndex = widget.startIndex.clamp(0, widget.images.length - 1);
   }
 
-  void _decide(String decision) {
+  void _commitDecision(String decision) {
     if (_currentIndex >= widget.images.length) return;
     setState(() {
       _decisions[_currentIndex] = decision;
@@ -64,6 +66,10 @@ class _SwipeScreenState extends State<SwipeScreen> {
     if (_currentIndex >= widget.images.length) {
       _showDoneDialog();
     }
+  }
+
+  void _decide(String decision) {
+    _cardKey.currentState?.flyOff(decision);
   }
 
   void _undo() {
@@ -162,6 +168,71 @@ class _SwipeScreenState extends State<SwipeScreen> {
     return true;
   }
 
+  Future<void> _showFileDetail(AssetEntity asset) async {
+    final file = await asset.file;
+    final bytes = file != null ? await file.length() : 0;
+    final sizeStr = bytes > 1024 * 1024
+        ? '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB'
+        : '${(bytes / 1024).toStringAsFixed(0)} KB';
+    final date = asset.createDateTime;
+    final dateStr =
+        '${date.day}/${date.month}/${date.year}  ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    // ignore: deprecated_member_use
+                    color: Colors.grey.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text('File details',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              _DetailRow(
+                  icon: Icons.image_outlined,
+                  label: 'Filename',
+                  value: asset.title ?? '—'),
+              _DetailRow(
+                  icon: Icons.straighten,
+                  label: 'Resolution',
+                  value: '${asset.width} × ${asset.height}'),
+              _DetailRow(
+                  icon: Icons.data_usage_outlined,
+                  label: 'Size',
+                  value: sizeStr),
+              _DetailRow(
+                  icon: Icons.calendar_today,
+                  label: 'Date taken',
+                  value: dateStr),
+              _DetailRow(
+                  icon: Icons.photo_camera_outlined,
+                  label: 'Type',
+                  value: asset.mimeType?.split('/').last.toUpperCase() ?? '—'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   AssetEntity get _currentAsset =>
       widget.images[_currentIndex.clamp(0, widget.images.length - 1)];
 
@@ -229,14 +300,16 @@ class _SwipeScreenState extends State<SwipeScreen> {
                     asset: _currentAsset,
                     index: _currentIndex,
                     total: widget.images.length,
+                    onInfo: () => _showFileDetail(_currentAsset),
                   ),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: _SwipeableCard(
                         key: ValueKey(_currentIndex),
+                        cardKey: _cardKey,
                         asset: _currentAsset,
-                        onDecide: _decide,
+                        onDecide: _commitDecision,
                       ),
                     ),
                   ),
@@ -310,8 +383,9 @@ class _ThumbnailStrip extends StatefulWidget {
   const _ThumbnailStrip({
     required this.images,
     required this.currentIndex,
-    required this.decisions
-    });
+    required this.decisions,
+  });
+
   @override
   State<_ThumbnailStrip> createState() => _ThumbnailStripState();
 }
@@ -333,7 +407,8 @@ class _ThumbnailStripState extends State<_ThumbnailStrip> {
 
   void _scrollToActive() {
     if (!_scrollController.hasClients) return;
-    final itemStart = _horizontalPadding + widget.currentIndex * (_itemWidth + _itemMargin);
+    final itemStart =
+        _horizontalPadding + widget.currentIndex * (_itemWidth + _itemMargin);
     final itemCenter = itemStart + _itemWidth / 2;
     final viewportCenter = _scrollController.position.viewportDimension / 2;
     final target = (itemCenter - viewportCenter)
@@ -358,21 +433,32 @@ class _ThumbnailStripState extends State<_ThumbnailStrip> {
       child: ListView.builder(
         controller: _scrollController,
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding, vertical: 8),
+        padding: const EdgeInsets.symmetric(
+            horizontal: _horizontalPadding, vertical: 8),
         itemCount: widget.images.length,
         itemBuilder: (context, index) {
           final isActive = index == widget.currentIndex;
+          final decision = widget.decisions[index];
+
           return Container(
             margin: const EdgeInsets.only(right: _itemMargin),
             width: _itemWidth,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
-              border: isActive
-                  ? Border.all(color: Theme.of(context).colorScheme.primary, width: 3)
-                  : Border.all(color: Colors.transparent, width: 3),
+              border: Border.all(
+                color: isActive
+                    ? Theme.of(context).colorScheme.primary
+                    : Colors.transparent,
+                width: 3,
+              ),
               boxShadow: isActive
-                  // ignore: deprecated_member_use
-                  ? [BoxShadow(color: Theme.of(context).colorScheme.primary.withOpacity(0.5), blurRadius: 6)]
+                  ? [
+                      BoxShadow(
+                        // ignore: deprecated_member_use
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                        blurRadius: 6,
+                      )
+                    ]
                   : null,
             ),
             child: ClipRRect(
@@ -385,24 +471,29 @@ class _ThumbnailStripState extends State<_ThumbnailStrip> {
                     isOriginal: false,
                     fit: BoxFit.cover,
                   ),
-                  if (widget.decisions.containsKey(index))
-                  Container(
-                    color: switch (widget.decisions[index]) {
-                      // ignore: deprecated_member_use
-                      'delete' => Colors.red.withOpacity(0.85),
-                      // ignore: deprecated_member_use
-                      'keep' => Colors.green.withOpacity(0.85),
-                      // ignore: deprecated_member_use
-                      'skip' => Colors.grey.withOpacity(0.85),
-                      _        => Colors.transparent,
-                    },
-                    child: switch (widget.decisions[index]) {
-                      'delete' => const Icon(Icons.close, color: Colors.white, size: 16),
-                      'keep'   => const Icon(Icons.check, color: Colors.white, size: 16),
-                      'skip'   => const Icon(Icons.fast_forward, color: Colors.white, size: 14),
-                      _        => null,
-                    },
-                  ),
+                  if (decision != null)
+                    Container(
+                      color: switch (decision) {
+                        // ignore: deprecated_member_use
+                        'delete' => Colors.red.withOpacity(0.55),
+                        // ignore: deprecated_member_use
+                        'keep' => Colors.green.withOpacity(0.45),
+                        // ignore: deprecated_member_use
+                        'skip' => Colors.grey.withOpacity(0.5),
+                        _ => Colors.transparent,
+                      },
+                      child: Center(
+                        child: switch (decision) {
+                          'delete' =>
+                            const Icon(Icons.close, color: Colors.white, size: 16),
+                          'keep' =>
+                            const Icon(Icons.check, color: Colors.white, size: 16),
+                          'skip' =>
+                            const Icon(Icons.fast_forward, color: Colors.white, size: 14),
+                          _ => null,
+                        },
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -417,11 +508,13 @@ class _InfoRow extends StatelessWidget {
   final AssetEntity asset;
   final int index;
   final int total;
+  final VoidCallback onInfo;
 
   const _InfoRow({
     required this.asset,
     required this.index,
     required this.total,
+    required this.onInfo,
   });
 
   @override
@@ -432,7 +525,7 @@ class _InfoRow extends StatelessWidget {
         children: [
           IconButton(
             icon: const Icon(Icons.info_outline, size: 18),
-            onPressed: () {},
+            onPressed: onInfo,
           ),
           Expanded(
             child: Center(
@@ -504,8 +597,14 @@ class _ActionButton extends StatelessWidget {
 class _SwipeableCard extends StatefulWidget {
   final AssetEntity asset;
   final void Function(String decision) onDecide;
+  final GlobalKey<_SwipeableCardState> cardKey;
 
-  const _SwipeableCard({super.key, required this.asset, required this.onDecide});
+  const _SwipeableCard({
+    super.key,
+    required this.cardKey,
+    required this.asset,
+    required this.onDecide,
+  });
 
   @override
   State<_SwipeableCard> createState() => _SwipeableCardState();
@@ -514,131 +613,245 @@ class _SwipeableCard extends StatefulWidget {
 class _SwipeableCardState extends State<_SwipeableCard>
     with SingleTickerProviderStateMixin {
   Offset _dragOffset = Offset.zero;
-  bool _dragging = false;
+  bool _animatingOff = false;
+
+  late final AnimationController _flyController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 280),
+  );
+  late Animation<Offset> _flyAnimation;
+
+  @override
+  void dispose() {
+    _flyController.dispose();
+    super.dispose();
+  }
+
+  void flyOff(String decision) {
+    if (_animatingOff) return;
+    _animatingOff = true;
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isRight = decision == 'keep';
+    final targetX = isRight ? screenWidth * 1.4 : -screenWidth * 1.4;
+
+    _flyAnimation = Tween<Offset>(
+      begin: _dragOffset,
+      end: Offset(targetX, _dragOffset.dy - 60),
+    ).animate(CurvedAnimation(
+      parent: _flyController,
+      curve: Curves.easeIn,
+    ));
+
+    _flyController.forward().then((_) {
+      if (mounted) widget.onDecide(decision);
+    });
+  }
 
   void _onPanUpdate(DragUpdateDetails details) {
+    if (_animatingOff) return;
     setState(() {
       _dragOffset += details.delta;
-      _dragging = true;
     });
   }
 
   void _onPanEnd(DragEndDetails details) {
+    if (_animatingOff) return;
     final threshold = MediaQuery.of(context).size.width * 0.28;
     if (_dragOffset.dx > threshold) {
-      widget.onDecide('keep');
+      flyOff('keep');
     } else if (_dragOffset.dx < -threshold) {
-      widget.onDecide('delete');
+      flyOff('delete');
     } else {
       setState(() {
         _dragOffset = Offset.zero;
-        _dragging = false;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final angle = _dragOffset.dx / 300;
-    final showDelete = _dragOffset.dx < -20;
-    final showKeep = _dragOffset.dx > 20;
-    final stampOpacity = (_dragOffset.dx.abs() / 100).clamp(0.0, 1.0);
+    final offset = _animatingOff ? _flyAnimation.value : _dragOffset;
+    final angle = offset.dx / 300;
+    final showDelete = offset.dx < -20;
+    final showKeep = offset.dx > 20;
+    final stampOpacity = (offset.dx.abs() / 100).clamp(0.0, 1.0);
 
-    return GestureDetector(
-      onPanUpdate: _onPanUpdate,
-      onPanEnd: _onPanEnd,
-      child: AnimatedContainer(
-        duration: _dragging ? Duration.zero : const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-        transform: Matrix4.identity()
-          ..translate(_dragOffset.dx, _dragOffset.dy)
-          ..rotateZ(angle),
-        transformAlignment: Alignment.center,
-        child: Stack(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: AssetEntityImage(
-                widget.asset,
-                isOriginal: false,
-                fit: BoxFit.contain,
-                width: double.infinity,
-                height: double.infinity,
-              ),
+    return AnimatedBuilder(
+      animation: _flyController,
+      builder: (context, child) {
+        return GestureDetector(
+          onPanUpdate: _onPanUpdate,
+          onPanEnd: _onPanEnd,
+          child: Transform(
+            transform: Matrix4.identity()
+              ..translate(offset.dx, offset.dy)
+              ..rotateZ(angle),
+            alignment: Alignment.center,
+            child: child,
+          ),
+        );
+      },
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AssetEntityImage(
+              widget.asset,
+              isOriginal: false,
+              fit: BoxFit.contain,
+              width: double.infinity,
+              height: double.infinity,
             ),
-            if (showDelete)
-              Positioned(
-                top: 24,
-                left: 24,
-                child: Opacity(
-                  opacity: stampOpacity,
-                  child: Transform.rotate(
-                    angle: -0.3,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.red, width: 3),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'DELETE',
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 22,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            if (showKeep)
-              Positioned(
-                top: 24,
-                right: 24,
-                child: Opacity(
-                  opacity: stampOpacity,
-                  child: Transform.rotate(
-                    angle: 0.3,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.green, width: 3),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'KEEP',
-                        style: TextStyle(
-                          color: Colors.green,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 22,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+          ),
+          if (showDelete)
             Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                decoration: BoxDecoration(
-                  // ignore: deprecated_member_use
-                  color: Colors.black.withOpacity(0.4),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.fullscreen, color: Colors.white),
-                  onPressed: () {},
+              top: 24,
+              left: 24,
+              child: Opacity(
+                opacity: stampOpacity,
+                child: Transform.rotate(
+                  angle: -0.3,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.red, width: 3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'DELETE',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 22,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ],
-        ),
+          if (showKeep)
+            Positioned(
+              top: 24,
+              right: 24,
+              child: Opacity(
+                opacity: stampOpacity,
+                child: Transform.rotate(
+                  angle: 0.3,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.green, width: 3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'KEEP',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 22,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              decoration: BoxDecoration(
+                // ignore: deprecated_member_use
+                color: Colors.black.withOpacity(0.4),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.fullscreen, color: Colors.white),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => _FullscreenViewer(asset: widget.asset),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FullscreenViewer extends StatelessWidget {
+  final AssetEntity asset;
+  const _FullscreenViewer({required this.asset});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Center(
+            child: InteractiveViewer(
+              child: AssetEntityImage(
+                asset,
+                isOriginal: true,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          SafeArea(
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _DetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              // ignore: deprecated_member_use
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+            ),
+          ),
+          const Spacer(),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
       ),
     );
   }
